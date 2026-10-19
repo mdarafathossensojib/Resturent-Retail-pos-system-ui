@@ -2,6 +2,8 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+
 import {
   DollarSign,
   ShoppingCart,
@@ -74,6 +76,7 @@ const recentOrders = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [period, setPeriod] = useState("This week");
 
   return (
@@ -197,7 +200,7 @@ export default function DashboardPage() {
 
           <button
             onClick={() => {
-              window.location.href = "/inventory";
+              router.push("/inventory");
             }}
             className="mt-5 flex w-full items-center justify-center gap-1 rounded-lg border border-border py-2.5 text-sm font-medium hover:bg-muted"
           >
@@ -220,7 +223,7 @@ export default function DashboardPage() {
 
             <button
               onClick={() => {
-                window.location.href = "/orders";
+                router.push("/orders");
               }}
               className="text-sm font-medium text-primary"
             >

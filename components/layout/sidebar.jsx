@@ -30,6 +30,7 @@ const menuGroups = [
     label: "INVENTORY & SALES",
     items: [
       { label: "Products", href: "/products", icon: Package },
+      { label: "Categories", href: "/categories", icon: Store },
       { label: "Inventory", href: "/inventory", icon: Boxes },
       { label: "Orders", href: "/orders", icon: ReceiptText },
       { label: "Customers", href: "/customers", icon: Users },
