@@ -1,42 +1,28 @@
-import { Analytics } from '@vercel/analytics/next'
-import './globals.css'
+
+import { Analytics } from "@vercel/analytics/next";
+import { ThemeProvider } from "@/components/ui/theme-provider";
+import "./globals.css";
 
 export const metadata = {
-  title: 'Northstar Market POS',
-  description: 'Touch-first retail checkout terminal for Northstar Market.',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
-}
+  title: "Retail POS System",
+  description: "Retail Point of Sale and Inventory Management System",
+};
 
 export const viewport = {
-  colorScheme: 'light',
-  themeColor: '#f7f8fa',
-  userScalable: false,
-}
+  themeColor: "#f7f8fa",
+  colorScheme: "light",
+};
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className="light" style={{ colorScheme: 'light' }}>
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
+
+        {process.env.NODE_ENV === "production" && <Analytics />}
       </body>
     </html>
-  )
+  );
 }
