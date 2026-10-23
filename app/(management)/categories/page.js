@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search,
@@ -23,56 +23,7 @@ import {
   Tag,
 } from "lucide-react";
 
-const initialCategories = [
-  {
-    id: 1,
-    name: "Coffee",
-    description: "Hot and cold coffee beverages",
-    icon: "coffee",
-    productCount: 12,
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Beverages",
-    description: "Juices, water and soft drinks",
-    icon: "beverages",
-    productCount: 10,
-    status: "Active",
-  },
-  {
-    id: 3,
-    name: "Food",
-    description: "Meals, burgers and savory items",
-    icon: "food",
-    productCount: 8,
-    status: "Active",
-  },
-  {
-    id: 4,
-    name: "Desserts",
-    description: "Cakes, sweets and desserts",
-    icon: "desserts",
-    productCount: 7,
-    status: "Active",
-  },
-  {
-    id: 5,
-    name: "Bakery",
-    description: "Fresh bread and baked goods",
-    icon: "bakery",
-    productCount: 6,
-    status: "Active",
-  },
-  {
-    id: 6,
-    name: "Snacks",
-    description: "Light snacks and quick bites",
-    icon: "snacks",
-    productCount: 7,
-    status: "Active",
-  },
-];
+const API_BASE = "https://resturent-retail-pos-system.vercel.app/api/v1";
 
 const categoryIcons = {
   coffee: Coffee,
@@ -121,13 +72,66 @@ function StatCard({ title, value, subtitle, icon: Icon }) {
 
 export default function CategoriesPage() {
   const router = useRouter();
-  const [categories, setCategories] = useState(initialCategories);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
+
+
+  const fetchCategories = useCallback(async (signal) => {
+    try {
+      const response = await fetch(`${API_BASE}/categories/`, {
+        signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to load categories (${response.status})`
+        );
+      }
+
+      const data = await response.json();
+
+      const categoryList = Array.isArray(data)
+        ? data
+        : data.results || [];
+
+      setCategories(
+        categoryList.map((category) => ({
+          ...category,
+          description: category.description || "",
+          icon: category.icon || "coffee",
+          productCount: Number(category.product_count ?? 0),
+          status: category.is_active === false ? "Inactive" : "Active",
+        }))
+      );
+
+      setApiError("");
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        setApiError(
+          err.message || "Failed to load categories."
+        );
+      }
+    } finally {
+      if (!signal.aborted) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetchCategories(controller.signal);
+
+    return () => controller.abort();
+  }, [fetchCategories]);
 
   const filteredCategories = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -275,6 +279,38 @@ export default function CategoriesPage() {
     link.click();
 
     URL.revokeObjectURL(url);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-60 items-center justify-center">
+        <p className="text-sm text-zinc-500">
+          Loading categories...
+        </p>
+      </div>
+    );
+  }
+
+  if (apiError && categories.length === 0) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-red-200 bg-white p-6 dark:border-red-900 dark:bg-zinc-900">
+        <p className="text-sm text-red-600 dark:text-red-400">
+          {apiError}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => {
+            setLoading(true);
+            const controller = new AbortController();
+            fetchCategories(controller.signal);
+          }}
+          className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (
