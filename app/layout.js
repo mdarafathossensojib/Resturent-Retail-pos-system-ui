@@ -1,7 +1,7 @@
 
 import { Analytics } from "@vercel/analytics/next";
-import { ThemeProvider } from "@/components/ui/theme-provider";
 import "./globals.css";
+import Providers from "./providers";
 
 export const metadata = {
   title: "Retail POS System",
@@ -17,9 +17,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <Providers>{children}</Providers>
 
         {process.env.NODE_ENV === "production" && <Analytics />}
       </body>

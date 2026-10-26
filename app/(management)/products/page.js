@@ -6,6 +6,8 @@ import Image from "next/image";
 import {
   ArrowDownToLine,
   Barcode,
+  AlertTriangle,
+  CheckCircle,
   Boxes,
   Edit3,
   Eye,
@@ -30,6 +32,45 @@ const emptyForm = {
   price: "",
   stock: "",
 };
+
+// Reads common JWT access-token storage formats used by the login page.
+function getAccessToken() {
+  if (typeof window === "undefined") return null;
+
+  const keys = ["access", "access_token", "accessToken", "authTokens", "tokens"];
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    for (const key of keys) {
+      const value = storage.getItem(key);
+      if (!value) continue;
+      try {
+        const parsed = JSON.parse(value);
+        const token = typeof parsed === "string" ? parsed : parsed.access || parsed.access_token || parsed.accessToken;
+        if (token) return token;
+      } catch {
+        if (key !== "authTokens" && key !== "tokens") return value;
+      }
+    }
+  }
+  return null;
+}
+
+async function readApiError(response) {
+  let data;
+  try { data = await response.json(); } catch { data = null; }
+  if (response.status === 401) return "Please log in again to continue.";
+  if (response.status === 403) return "You don't have permission to perform this action.";
+  if (response.status === 404) return "The requested product or category was not found.";
+  if (response.status === 429) return "Too many requests. Please wait and try again.";
+  if (response.status >= 500) return "The server encountered an error. Please try again later.";
+  if (data && typeof data === "object") {
+    const messages = Object.entries(data).flatMap(([key, value]) => {
+      const values = Array.isArray(value) ? value : [value];
+      return values.filter((v) => typeof v === "string").map((v) => key === "detail" || key === "non_field_errors" ? v : `${key}: ${v}`);
+    });
+    if (messages.length) return messages.join(" ");
+  }
+  return `Request failed (${response.status}). Please try again.`;
+}
 
 const money = (value) =>
   `৳${Number(value || 0).toLocaleString("en-BD", {
@@ -215,6 +256,9 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
+  const [toast, setToast] = useState(null);
 
   const formatProduct = useCallback((item, categoryMap) => {
     return {
@@ -223,9 +267,10 @@ export default function ProductsPage() {
       sku: item.sku || "",
       barcode: item.barcode || "",
       category:
-        categoryMap.get(item.category) ||
+        categoryMap.get(typeof item.category === "object" ? item.category?.id : item.category) ||
+        (typeof item.category === "object" ? item.category?.name : null) ||
         `Category ${item.category ?? ""}`,
-      categoryId: item.category,
+      categoryId: typeof item.category === "object" ? item.category?.id : item.category,
       cost: Number(item.cost_price ?? 0),
       price: Number(item.selling_price ?? 0),
       stock: Number(item.stock ?? 0),
@@ -260,9 +305,11 @@ export default function ProductsPage() {
 
         const productsData = await productsResponse.json();
 
-        const categoriesJson = categoriesResponse.ok
-          ? await categoriesResponse.json()
-          : [];
+        if (!categoriesResponse.ok) {
+          throw new Error("Failed to fetch categories.");
+        }
+
+        const categoriesJson = await categoriesResponse.json();
 
         const categoryList = Array.isArray(categoriesJson)
           ? categoriesJson
@@ -479,7 +526,7 @@ export default function ProductsPage() {
       name: product.name,
       sku: product.sku,
       barcode: product.barcode || "",
-      category: product.category,
+      category: String(product.categoryId ?? ""),
       cost: String(product.cost),
       price: String(product.price),
       stock: String(product.stock),
@@ -489,92 +536,123 @@ export default function ProductsPage() {
     setModalOpen(true);
   }
 
-  // Demo-only form operation: this does not call the backend.
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setFormError("");
 
-    if (
-      !form.name.trim() ||
-      !form.sku.trim() ||
-      !form.category.trim()
-    ) {
-      setFormError(
-        "Product name, SKU and category are required."
-      );
+    if (!form.name.trim() || !form.sku.trim() || !form.category) {
+      setFormError("Product name, SKU and category are required.");
+      return;
+    }
+    if (form.cost === "" || form.price === "" || form.stock === "" ||
+        !Number.isFinite(Number(form.cost)) || !Number.isFinite(Number(form.price)) ||
+        !Number.isInteger(Number(form.stock)) || Number(form.cost) < 0 ||
+        Number(form.price) < 0 || Number(form.stock) < 0) {
+      setFormError("Enter valid non-negative prices and a whole-number stock quantity.");
       return;
     }
 
-    if (
-      form.cost === "" ||
-      form.price === "" ||
-      form.stock === "" ||
-      Number(form.cost) < 0 ||
-      Number(form.price) < 0 ||
-      Number(form.stock) < 0
-    ) {
-      setFormError(
-        "Enter valid non-negative prices and stock quantity."
-      );
-      return;
-    }
-
-    const duplicateSku = products.some(
-      (product) =>
-        product.sku.toLowerCase() ===
-          form.sku.trim().toLowerCase() &&
-        product.id !== editingProduct?.id
+    const duplicateSku = products.some((product) =>
+      product.sku.toLowerCase() === form.sku.trim().toLowerCase() &&
+      product.id !== editingProduct?.id
     );
-
     if (duplicateSku) {
-      setFormError("This SKU already exists.");
+      setFormError("This SKU already exists in the loaded products. The server will also validate uniqueness.");
       return;
     }
 
-    const productData = {
+    const token = getAccessToken();
+    if (!token) {
+      setFormError("You need to log in before adding or editing products.");
+      setToast({ type: "error", message: "You need to log in before adding or editing products." });
+      return;
+    }
+
+    const payload = {
       name: form.name.trim(),
       sku: form.sku.trim(),
-      barcode: form.barcode.trim(),
-      category: form.category.trim(),
-      cost: Number(form.cost),
-      price: Number(form.price),
+      barcode: form.barcode.trim() || null,
+      category: Number(form.category),
+      cost_price: Number(form.cost),
+      selling_price: Number(form.price),
       stock: Number(form.stock),
     };
 
-    if (editingProduct) {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === editingProduct.id
-            ? { ...product, ...productData }
-            : product
-        )
-      );
-    } else {
-      setProducts((current) => [
-        { id: Date.now(), ...productData },
-        ...current,
-      ]);
-    }
+    setSaving(true);
+    try {
+      const isEdit = Boolean(editingProduct);
+      const response = await fetch(`${API_BASE}/products/${isEdit ? `${editingProduct.id}/` : ""}`, {
+        method: isEdit ? "PATCH" : "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    setModalOpen(false);
-    setForm(emptyForm);
+      if (!response.ok) {
+        const message = await readApiError(response);
+        setFormError(message);
+        setToast({ type: "error", message: response.status === 403 ? `You don't have permission to ${isEdit ? "edit" : "add"} products.` : message });
+        return;
+      }
+
+      const saved = await response.json();
+      const categoryMap = new Map(categoriesData.map((item) => [item.id, item.name]));
+      const formatted = formatProduct(saved, categoryMap);
+      setProducts((current) => isEdit
+        ? current.map((item) => item.id === formatted.id ? formatted : item)
+        : [formatted, ...current.filter((item) => item.id !== formatted.id)]
+      );
+      if (!isEdit) setTotalCount((count) => count + 1);
+      setModalOpen(false);
+      setForm(emptyForm);
+      setEditingProduct(null);
+      setToast({ type: "success", message: isEdit ? "Product updated successfully." : "Product created successfully." });
+    } catch (err) {
+      const message = err instanceof TypeError
+        ? "Network error. Check your internet connection and API server/CORS settings."
+        : err.message || "Something went wrong while saving the product.";
+      setFormError(message);
+      setToast({ type: "error", message });
+    } finally {
+      setSaving(false);
+    }
   }
 
   function viewProduct(product) {
     router.push(`/products/${product.id}`);
   }
 
-  // Demo-only delete operation: this does not call the backend.
-  function deleteProduct(product) {
-    const confirmed = window.confirm(
-      `Delete "${product.name}" from this demo list?`
-    );
-
+  async function deleteProduct(product) {
+    const confirmed = window.confirm(`Are you sure you want to delete "${product.name}"? This action cannot be undone.`);
     if (!confirmed) return;
 
-    setProducts((current) =>
-      current.filter((item) => item.id !== product.id)
-    );
+    const token = getAccessToken();
+    if (!token) {
+      setToast({ type: "error", message: "You need to log in before deleting products." });
+      return;
+    }
+
+    setDeletingId(product.id);
+    try {
+      const response = await fetch(`${API_BASE}/products/${product.id}/`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const message = await readApiError(response);
+        setToast({ type: "error", message: response.status === 403 ? "You don't have permission to delete products." : message });
+        return;
+      }
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+      setTotalCount((count) => Math.max(0, count - 1));
+      setToast({ type: "success", message: "Product deleted successfully." });
+    } catch (err) {
+      setToast({ type: "error", message: err instanceof TypeError ? "Network error. Check your connection and API server." : err.message || "Could not delete product." });
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   function exportCsv() {
@@ -965,7 +1043,19 @@ export default function ProductsPage() {
                   >
                     {field.label}
 
-                    <input
+                    {field.key === "category" ? (
+                      <select
+                        required
+                        value={form.category}
+                        onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                        className="h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary"
+                      >
+                        <option value="">Select a category</option>
+                        {categoriesData.map((item) => (
+                          <option key={item.id} value={String(item.id)}>{item.name}</option>
+                        ))}
+                      </select>
+                    ) : <input
                       required={field.required}
                       type={field.type || "text"}
                       min={
@@ -989,7 +1079,7 @@ export default function ProductsPage() {
                       }
                       placeholder={field.placeholder}
                       className="h-10 rounded-lg border bg-background px-3 text-sm outline-none focus:border-primary"
-                    />
+                    />}
                   </label>
                 ))}
               </div>
@@ -1006,23 +1096,31 @@ export default function ProductsPage() {
               <div className="flex justify-end gap-2 border-t pt-4">
                 <button
                   type="button"
+                  disabled={saving}
                   onClick={() => setModalOpen(false)}
-                  className="h-9 rounded-lg border px-4 text-xs font-medium hover:bg-muted"
+                  className="h-9 rounded-lg border px-4 text-xs font-medium hover:bg-muted disabled:opacity-50"
                 >
                   Cancel
                 </button>
 
                 <button
                   type="submit"
-                  className="h-9 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground hover:opacity-90"
+                  disabled={saving}
+                  className="h-9 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {editingProduct
-                    ? "Save changes"
-                    : "Add product"}
+                  {saving ? "Saving..." : editingProduct ? "Save changes" : "Add product"}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {toast && (
+        <div role={toast.type === "error" ? "alert" : "status"} className={`fixed right-5 top-20 z-100 flex max-w-md items-center gap-3 rounded-lg border px-4 py-3 shadow-xl ${toast.type === "error" ? "border-red-600/30 bg-red-950/95 text-red-100" : "border-green-600/30 bg-green-950/95 text-green-100"}`}>
+          {toast.type === "error" ? <AlertTriangle className="size-5 shrink-0 text-red-400" /> : <CheckCircle className="size-5 shrink-0 text-green-400" />}
+          <p className="text-sm font-medium">{toast.message}</p>
+          <button type="button" onClick={() => setToast(null)} className="ml-2 shrink-0 opacity-80 hover:opacity-100" aria-label="Dismiss notification"><X className="size-4" /></button>
         </div>
       )}
     </div>

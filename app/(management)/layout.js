@@ -1,6 +1,11 @@
 
 import { AppShell } from "@/components/layout/app-shell";
+import AuthGuard from "@/components/auth/AuthGuard";
 
 export default function ManagementLayout({ children }) {
-  return <AppShell>{children}</AppShell>;
+  return (
+    <AuthGuard>
+      <AppShell>{children}</AppShell>
+    </AuthGuard>
+  );
 }
