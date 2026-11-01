@@ -17,8 +17,32 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-const API_BASE =
-  "https://resturent-retail-pos-system.vercel.app/api/v1";
+const API_BASE =  "https://resturent-retail-pos-system.vercel.app/api/v1";
+
+const getImageUrl = (image) => {
+  if (!image) return "";
+
+  if (typeof image === "object") {
+    image = image.secure_url || image.url || "";
+  }
+
+  if (typeof image !== "string") return "";
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  if (image.startsWith("/")) {
+    return image;
+  }
+
+  // Cloudinary-relative path
+  if (image.startsWith("image/")) {
+    return `https://res.cloudinary.com/mdarafathossen/${image}`;
+  }
+
+  return "";
+};
 
 const money = (value) =>
   `৳${Number(value ?? 0).toLocaleString("en-BD", {
@@ -262,11 +286,13 @@ export default function SingleProductPage() {
     );
   }
 
-  const imageSrc = typeof product?.imageUrl === "string" && product.imageUrl.trim()
-    ? product.imageUrl.trim()
-    : typeof product?.image === "string" && product.image.trim()
-      ? product.image.trim()
-      : null;
+  // const imageSrc = typeof product?.imageUrl === "string" && product.imageUrl.trim()
+  //   ? product.imageUrl.trim()
+  //   : typeof product?.image === "string" && product.image.trim()
+  //     ? product.image.trim()
+  //     : null;
+
+  const imageSrc = getImageUrl(product?.image) || getImageUrl(product?.imageUrl);
 
   return (
     <div className="space-y-5 p-4 pb-8 lg:p-6">
