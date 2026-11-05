@@ -161,6 +161,7 @@ function ProductCard({ product, onView, onEdit, onDelete }) {
             alt={product.name}
             width={300}
             height={300}
+            loading="eager"
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
