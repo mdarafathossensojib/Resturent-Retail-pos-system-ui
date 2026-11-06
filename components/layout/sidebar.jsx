@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -16,40 +17,86 @@ import {
   Settings,
   Store,
   ChevronLeft,
+  UserCog,
 } from "lucide-react";
 
-const menuGroups = [
-  {
-    label: "MAIN MENU",
-    items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-      { label: "POS Checkout", href: "/pos-checkout", icon: ShoppingCart },
-    ],
-  },
-  {
-    label: "INVENTORY & SALES",
-    items: [
-      { label: "Products", href: "/products", icon: Package },
-      { label: "Categories", href: "/categories", icon: Store },
-      { label: "Sales", href: "/sales", icon: ShoppingCart },
-      { label: "Inventory", href: "/inventory", icon: Boxes },
-      { label: "Orders", href: "/orders", icon: ReceiptText },
-      { label: "Customers", href: "/customers", icon: Users },
-    ],
-  },
-  {
-    label: "MANAGEMENT",
-    items: [
-      { label: "Suppliers", href: "/suppliers", icon: Truck },
-      { label: "Purchases", href: "/purchases", icon: ShoppingBag },
-      { label: "Reports", href: "/reports", icon: ChartNoAxesCombined },
-      { label: "Settings", href: "/settings", icon: Settings },
-    ],
-  },
-];
+
 
 export function Sidebar({ onNavigate, collapsed = false, onToggle }) {
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState("");
+
+  useEffect(() => {
+    const loadUserRole = async () => {
+      try {
+        const stored = localStorage.getItem("authTokens");
+        if (!stored) return;
+
+        const token = JSON.parse(stored)?.access;
+        if (!token) return;
+
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL || "https://resturent-retail-pos-system.vercel.app/api/v1"}/auth/users/me/`,
+          {
+            headers: {
+              Authorization: `JWT ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        setUserRole(data.role || "");
+      } catch (error) {
+        console.error("Failed to load user role:", error);
+      }
+    };
+
+    loadUserRole();
+  }, []);
+
+  
+  const menuGroups = [
+    {
+      label: "MAIN MENU",
+      items: [
+        { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+        { label: "POS Checkout", href: "/pos-checkout", icon: ShoppingCart },
+      ],
+    },
+    {
+      label: "INVENTORY & SALES",
+      items: [
+        { label: "Products", href: "/products", icon: Package },
+        { label: "Categories", href: "/categories", icon: Store },
+        { label: "Sales", href: "/sales", icon: ShoppingCart },
+        { label: "Inventory", href: "/inventory", icon: Boxes },
+        { label: "Orders", href: "/orders", icon: ReceiptText },
+        { label: "Customers", href: "/customers", icon: Users },
+      ],
+    },
+    {
+      label: "MANAGEMENT",
+      items: [
+        { label: "Suppliers", href: "/suppliers", icon: Truck },
+        { label: "Purchases", href: "/purchases", icon: ShoppingBag },
+        { label: "Reports", href: "/reports", icon: ChartNoAxesCombined },
+
+        ...(userRole === "admin"
+          ? [
+              {
+                label: "User Management",
+                href: "/users",
+                icon: UserCog,
+              },
+            ]
+          : []),
+
+        { label: "Settings", href: "/settings", icon: Settings },
+      ],
+    },
+  ];
 
   return (
     <aside

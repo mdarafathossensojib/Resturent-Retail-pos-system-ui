@@ -14,8 +14,19 @@ const API_BASE = (
   "https://resturent-retail-pos-system.vercel.app/api/v1"
 ).replace(/\/$/, "");
 
+const emptyNewProduct = {
+  category: "",
+  name: "",
+  sku: "",
+  barcode: "",
+  selling_price: "",
+  low_stock_threshold: 10,
+};
+
 const emptyItem = {
+  type: "existing",
   product: "",
+  new_product: { ...emptyNewProduct },
   quantity: 1,
   cost_price: "",
 };
@@ -77,6 +88,7 @@ export default function PurchasesPage() {
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -171,16 +183,18 @@ export default function PurchasesPage() {
 
       setError("");
 
-      const [purchaseData, supplierData, productData] =
+      const [purchaseData, supplierData, productData, categoryData] =
         await Promise.all([
           fetchAll("/purchases/"),
           fetchAll("/suppliers/"),
           fetchAll("/products/"),
+          fetchAll("/categories/"),
         ]);
 
       setPurchases(purchaseData);
       setSuppliers(supplierData);
       setProducts(productData);
+      setCategories(categoryData);
     } catch (err) {
       setError(err.message || "Failed to load purchase data.");
     } finally {
@@ -265,7 +279,9 @@ export default function PurchasesPage() {
   }, [search]);
 
   const selectedItems = items.map((item) => {
-    const product = productMap.get(Number(item.product));
+    const product = item.type === "existing"
+      ? productMap.get(Number(item.product))
+      : null;
     const quantity = Math.max(0, Number(item.quantity) || 0);
     const cost = Math.max(0, Number(item.cost_price) || 0);
 
@@ -283,7 +299,7 @@ export default function PurchasesPage() {
 
   const availableProducts = products.filter(
     (product) => !items.some(
-      (item) => Number(item.product) === product.id
+      (item) => item.type === "existing" && Number(item.product) === product.id
     )
   );
 
@@ -301,8 +317,33 @@ export default function PurchasesPage() {
     );
   }
 
+  function updateNewProduct(index, field, value) {
+    setItems((current) => current.map((item, i) => (
+      i === index
+        ? { ...item, new_product: { ...item.new_product, [field]: value } }
+        : item
+    )));
+  }
+
+  function changeItemType(index, type) {
+    setItems((current) => current.map((item, i) => (
+      i === index
+        ? {
+            ...item,
+            type,
+            product: "",
+            new_product: { ...emptyNewProduct },
+            cost_price: "",
+          }
+        : item
+    )));
+  }
+
   function addItem() {
-    setItems((current) => [...current, { ...emptyItem }]);
+    setItems((current) => [...current, {
+      ...emptyItem,
+      new_product: { ...emptyNewProduct },
+    }]);
   }
 
   function removeItem(index) {
@@ -315,7 +356,10 @@ export default function PurchasesPage() {
 
   function resetForm() {
     setSupplierId("");
-    setItems([{ ...emptyItem }]);
+    setItems([{
+      ...emptyItem,
+      new_product: { ...emptyNewProduct },
+    }]);
     setPurchaseSearch("");
   }
 
@@ -329,14 +373,32 @@ export default function PurchasesPage() {
       return;
     }
 
-    if (items.some(
-      (item) =>
-        !item.product ||
+    const invalidItem = items.some((item) => {
+      const invalidCommon =
+        !Number.isInteger(Number(item.quantity)) ||
         Number(item.quantity) < 1 ||
         item.cost_price === "" ||
-        Number(item.cost_price) < 0
-    )) {
-      setError("Please complete all purchase item fields.");
+        !Number.isFinite(Number(item.cost_price)) ||
+        Number(item.cost_price) < 0;
+
+      if (invalidCommon) return true;
+      if (item.type === "existing") return !item.product;
+
+      const product = item.new_product;
+      return (
+        !product.category ||
+        !product.name.trim() ||
+        !product.sku.trim() ||
+        product.selling_price === "" ||
+        !Number.isFinite(Number(product.selling_price)) ||
+        Number(product.selling_price) < 0 ||
+        !Number.isInteger(Number(product.low_stock_threshold)) ||
+        Number(product.low_stock_threshold) < 0
+      );
+    });
+
+    if (invalidItem) {
+      setError("Please complete all required product and purchase fields.");
       return;
     }
 
@@ -346,11 +408,32 @@ export default function PurchasesPage() {
 
       const payload = {
         supplier: Number(supplierId),
-        items: items.map((item) => ({
-          product: Number(item.product),
-          quantity: Number(item.quantity),
-          cost_price: Number(item.cost_price).toFixed(2),
-        })),
+        items: items.map((item) => {
+          const common = {
+            quantity: Number(item.quantity),
+            cost_price: Number(item.cost_price).toFixed(2),
+          };
+
+          if (item.type === "existing") {
+            return {
+              ...common,
+              product: Number(item.product),
+            };
+          }
+
+          return {
+            ...common,
+            new_product: {
+              category: Number(item.new_product.category),
+              name: item.new_product.name.trim(),
+              sku: item.new_product.sku.trim(),
+              barcode: item.new_product.barcode.trim() || null,
+              cost_price: common.cost_price,
+              selling_price: Number(item.new_product.selling_price).toFixed(2),
+              low_stock_threshold: Number(item.new_product.low_stock_threshold),
+            },
+          };
+        }),
       };
 
       await apiRequest("/purchases/", {
@@ -764,38 +847,129 @@ export default function PurchasesPage() {
                       <div className="grid gap-3 md:grid-cols-12">
                         <div className="md:col-span-6">
                           <label className="mb-1.5 block text-[10px] text-muted-foreground">
-                            Product
+                            Product type
                           </label>
+                          <div className="mb-2 flex rounded-lg border bg-muted/30 p-1">
+                            <button
+                              type="button"
+                              onClick={() => changeItemType(index, "existing")}
+                              className={`flex-1 rounded-md px-2 py-2 text-[11px] font-medium ${item.type === "existing" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+                            >
+                              Existing product
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => changeItemType(index, "new")}
+                              className={`flex-1 rounded-md px-2 py-2 text-[11px] font-medium ${item.type === "new" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"}`}
+                            >
+                              Create new product
+                            </button>
+                          </div>
 
-                          <select
-                            required
-                            value={item.product}
-                            onChange={(e) =>
-                              updateItem(index, "product", e.target.value)
-                            }
-                            className="h-10 w-full rounded-lg border bg-card px-3 text-xs outline-none focus:border-primary"
-                          >
-                            <option value="">Select product</option>
-                            {products.map((product) => (
-                              <option
-                                key={product.id}
-                                value={product.id}
-                                disabled={items.some(
-                                  (other, i) =>
-                                    i !== index &&
-                                    Number(other.product) === product.id
-                                )}
+                          {item.type === "existing" ? (
+                            <>
+                              <select
+                                required
+                                value={item.product}
+                                onChange={(e) => updateItem(index, "product", e.target.value)}
+                                className="h-10 w-full rounded-lg border bg-card px-3 text-xs outline-none focus:border-primary"
                               >
-                                {product.name} — Stock: {product.stock}
-                              </option>
-                            ))}
-                          </select>
-
-                          {item.productData && (
-                            <p className="mt-1 text-[10px] text-muted-foreground">
-                              SKU: {item.productData.sku || "—"} · Current stock:{" "}
-                              {item.productData.stock}
-                            </p>
+                                <option value="">Select product</option>
+                                {products.map((product) => (
+                                  <option
+                                    key={product.id}
+                                    value={product.id}
+                                    disabled={items.some(
+                                      (other, otherIndex) =>
+                                        otherIndex !== index &&
+                                        other.type === "existing" &&
+                                        Number(other.product) === product.id
+                                    )}
+                                  >
+                                    {product.name} — Stock: {product.stock}
+                                  </option>
+                                ))}
+                              </select>
+                              {item.productData && (
+                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                  SKU: {item.productData.sku || "—"} · Current stock: {item.productData.stock}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-2">
+                              <div className="sm:col-span-2">
+                                <label className="mb-1 block text-[10px] text-muted-foreground">Category *</label>
+                                <select
+                                  required
+                                  value={item.new_product.category}
+                                  onChange={(e) => updateNewProduct(index, "category", e.target.value)}
+                                  className="h-9 w-full rounded-lg border bg-background px-2.5 text-xs outline-none focus:border-primary"
+                                >
+                                  <option value="">Select category</option>
+                                  {categories.map((category) => (
+                                    <option key={category.id} value={category.id}>{category.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[10px] text-muted-foreground">Product name *</label>
+                                <input
+                                  required
+                                  value={item.new_product.name}
+                                  onChange={(e) => updateNewProduct(index, "name", e.target.value)}
+                                  placeholder="Product name"
+                                  className="h-9 w-full rounded-lg border bg-background px-2.5 text-xs outline-none focus:border-primary"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[10px] text-muted-foreground">SKU *</label>
+                                <input
+                                  required
+                                  value={item.new_product.sku}
+                                  onChange={(e) => updateNewProduct(index, "sku", e.target.value)}
+                                  placeholder="Unique SKU"
+                                  className="h-9 w-full rounded-lg border bg-background px-2.5 text-xs outline-none focus:border-primary"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[10px] text-muted-foreground">Barcode</label>
+                                <input
+                                  value={item.new_product.barcode}
+                                  onChange={(e) => updateNewProduct(index, "barcode", e.target.value)}
+                                  placeholder="Optional"
+                                  className="h-9 w-full rounded-lg border bg-background px-2.5 text-xs outline-none focus:border-primary"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[10px] text-muted-foreground">Selling price (৳) *</label>
+                                <input
+                                  required
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={item.new_product.selling_price}
+                                  onChange={(e) => updateNewProduct(index, "selling_price", e.target.value)}
+                                  placeholder="0.00"
+                                  className="h-9 w-full rounded-lg border bg-background px-2.5 text-xs outline-none focus:border-primary"
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-[10px] text-muted-foreground">Low stock threshold</label>
+                                <input
+                                  required
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={item.new_product.low_stock_threshold}
+                                  onChange={(e) => updateNewProduct(index, "low_stock_threshold", e.target.value)}
+                                  className="h-9 w-full rounded-lg border bg-background px-2.5 text-xs outline-none focus:border-primary"
+                                />
+                              </div>
+                              <p className="text-[10px] text-muted-foreground sm:col-span-2">
+                                Initial stock will be added from the purchase quantity below.
+                              </p>
+                            </div>
                           )}
                         </div>
 
@@ -855,9 +1029,9 @@ export default function PurchasesPage() {
                   Add another product
                 </button>
 
-                {products.length === 0 && (
+                {categories.length === 0 && items.some((item) => item.type === "new") && (
                   <p className="mt-3 text-xs text-amber-600">
-                    No products found. Create products from the Products page first.
+                    No categories found. Create a category before adding a new product.
                   </p>
                 )}
               </div>
@@ -900,7 +1074,7 @@ export default function PurchasesPage() {
 
               <button
                 type="submit"
-                disabled={saving || !suppliers.length || !products.length}
+                disabled={saving || !suppliers.length || (items.some((item) => item.type === "new") && !categories.length)}
                 className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-4 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
               >
                 {saving && <RefreshCw className="size-3.5 animate-spin" />}
