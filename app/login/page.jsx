@@ -139,12 +139,12 @@ export default function LoginPage() {
               </span>
             </label>
             <div className="flex justify-end text-sm">
-              <Link
-                href="/forgot-password"
+              <button
+                onClick={() => alert("Password reset functionality is not available.")}
                 className="font-bold text-indigo-600"
               >
                 Forgot password?
-              </Link>
+              </button>
             </div>
             {(formError || errorMsg) && (
               <p
@@ -163,9 +163,9 @@ export default function LoginPage() {
           </form>
           <p className="mt-7 text-center text-sm text-slate-500">
             Don’t have an account?{" "}
-            <Link href="/register" className="font-extrabold text-indigo-600">
+            <button onClick={() => alert("Only Admin can create accounts.")} className="font-extrabold text-indigo-600">
               Create account
-            </Link>
+            </button>
           </p>
           <div className="mt-8 flex justify-center gap-2 text-xs text-slate-400">
             <ShieldCheck className="size-4" /> Your workspace, your control

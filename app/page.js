@@ -45,7 +45,7 @@ export default function HomePage() {
             Log in
           </Link>
           <Link
-            href="/register"
+            href="/login"
             className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white"
           >
             Get started <ArrowRight className="ml-1 inline size-4" />

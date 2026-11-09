@@ -131,7 +131,7 @@ export function Topbar({ onMenuClick, title = "Dashboard" }) {
                   role="menuitem"
                   onClick={() => {
                     setDropdownOpen(false);
-                    router.push("/profile");
+                    router.push("/settings");
                   }}
                   className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm hover:bg-muted"
                 >
