@@ -208,7 +208,7 @@ export default function HomePage() {
             </p>
           </div>
           <Link
-            href="/register"
+            href="/login"
             className="rounded-xl bg-white px-5 py-3 font-black text-indigo-700"
           >
             Get started <ArrowRight className="ml-1 inline size-4" />

@@ -89,15 +89,21 @@ export default function LoginPage() {
           <p className="mt-8 text-xs font-black uppercase tracking-[.2em] text-indigo-600">
             Welcome back
           </p>
-          <h2 className="mt-2 text-3xl font-black tracking-tight">
+          <h2 className="mt-2 text-3xl font-black tracking-tight text-indigo-600">
             Sign in to your account
           </h2>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
-            Enter your details below to access your workspace.
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            Enter this Email and Password to sign in. You can use the following credentials for testing:
+          </p>
+          <p className="mt-3 text-sm leading-6 text-slate-500">
+            Email: <b>admin@gmail.com</b>
+          </p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">
+            Password: <b>1234</b>
           </p>
           <form onSubmit={submit} className="mt-8 space-y-5">
             <label className="block">
-              <span className="mb-2 block text-sm font-bold">
+              <span className="mb-2 block text-sm font-bold text-slate-600">
                 Email address
               </span>
               <span className="relative block">
@@ -113,7 +119,7 @@ export default function LoginPage() {
               </span>
             </label>
             <label className="block">
-              <span className="mb-2 block text-sm font-bold">Password</span>
+              <span className="mb-2 block text-sm font-bold text-slate-600">Password</span>
               <span className="relative block">
                 <LockKeyhole className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <input
