@@ -252,10 +252,9 @@ export default function NotificationDetailsPage() {
 
             <button
               type="button"
-              onClick={handleRelatedPage}
               className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
             >
-              View Related Details
+              This feature is not yet implemented.
               <ExternalLink size={15} />
             </button>
           </div>

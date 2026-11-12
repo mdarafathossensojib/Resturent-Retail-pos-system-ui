@@ -122,6 +122,30 @@ function Notice({ notice, onClose }) {
   );
 }
 
+const getImageUrl = (image) => {
+  if (!image) return "";
+
+  if (typeof image === "object") {
+    image = image.secure_url || image.url || "";
+  }
+
+  if (typeof image !== "string") return "";
+
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    return image;
+  }
+
+  if (image.startsWith("/")) {
+    return image;
+  }
+
+  if (image.startsWith("image/")) {
+    return `https://res.cloudinary.com/mdarafathossen/${image}`;
+  }
+
+  return "";
+};
+
 export default function SettingsPage() {
   const [profile, setProfile] = useState(EMPTY_PROFILE);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -176,12 +200,9 @@ export default function SettingsPage() {
         ...EMPTY_PROFILE,
         ...data,
         date_of_birth: data?.date_of_birth || "",
-        profile_image:
-          typeof data?.profile_image === "string" ? data.profile_image : "",
+        profile_image: getImageUrl(data?.profile_image),
       });
-      setImagePreview(
-        typeof data?.profile_image === "string" ? data.profile_image : ""
-      );
+      setImagePreview(getImageUrl(data?.profile_image));
       setSelectedImage(null);
     } catch (error) {
       setNotice({ type: "error", message: error.message });
@@ -263,12 +284,10 @@ export default function SettingsPage() {
         ...current,
         ...data,
         profile_image:
-          typeof data?.profile_image === "string"
-            ? data.profile_image
-            : current.profile_image,
+          getImageUrl(data?.profile_image) || current.profile_image,
       }));
-      if (typeof data?.profile_image === "string") {
-        setImagePreview(data.profile_image);
+      if (getImageUrl(data?.profile_image)) {
+        setImagePreview(getImageUrl(data?.profile_image));
       }
       setSelectedImage(null);
       if (fileInputRef.current) fileInputRef.current.value = "";

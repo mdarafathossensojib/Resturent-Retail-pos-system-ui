@@ -163,11 +163,7 @@ export default function NotificationsPage() {
         setUnreadCount((previous) => Math.max(0, previous - 1));
       }
 
-      if (notification.related_url) {
-        router.push(notification.related_url);
-      } else {
-        router.push(`/notifications/${notification.id}`);
-      }
+      router.push(`/notifications/${notification.id}`);
     } catch (err) {
       console.error("Mark notification as read failed:", err);
       setError("Could not update this notification.");
